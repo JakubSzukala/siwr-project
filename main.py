@@ -6,6 +6,7 @@ from matplotlib import pyplot as plt
 import cv2
 from pgmpy.models import FactorGraph
 from pgmpy.factors.discrete import DiscreteFactor
+from pgmpy.inference import BeliefPropagation
 
 import numpy as np
 
@@ -50,6 +51,7 @@ class Matcher:
         self.frame2 = frame2
         self.G = FactorGraph()
         self._add_variable_nodes()
+        self.belief_propagation = None
 
 
     def set_frames(self, frame1, frame2):
@@ -74,6 +76,7 @@ class Matcher:
                 [self.frame1.bbox_n + 1],
                 [[ 0.25 ] + factor_similarity_values ])
             self.G.add_factors(df)
+            self.G.add_edge(f'X_{frame2_bbox_idx}', df)
         return self
 
 
@@ -85,14 +88,28 @@ class Matcher:
         for i, j in combinations(range(self.frame2.bbox_n), 2):
             df = DiscreteFactor(
                 [f'X_{i}', f'X_{j}'],
-                [self.frame1.bbox_n, self.frame1.bbox_n],
+                [self.frame1.bbox_n + 1, self.frame1.bbox_n + 1],
                 values)
             self.G.add_factors(df)
+            self.G.add_edge(f'X_{i}', df)
+            self.G.add_edge(f'X_{j}', df)
         return self
 
 
+    def finish(self):
+        print(f"Factors: {self.G.get_factors()[0].variables}")
+        print(f"Variables: {self.G.get_variable_nodes()}")
+        self.belief_propagation = BeliefPropagation(self.G)
+        self.belief_propagation.calibrate()
+        return self
+
+
+    def match(self):
+        return self.belief_propagation.map_query(self.G.get_variable_nodes())
+
+
     def _add_variable_nodes(self):
-        for index in range(self.frame1.bbox_n):
+        for index in range(self.frame2.bbox_n):
             self.G.add_node(f'X_{index}')
 
 
@@ -117,13 +134,13 @@ if __name__ == '__main__':
     frames = parse_labels(os.path.join(dataset_root))
     #print(frames[1].coordinates)
     matcher = Matcher(frames[0], frames[1])
-    matcher.set_frames(frames[1], frames[2]) \
+    matcher.set_frames(frames[0], frames[1]) \
         .add_histogram_comparission_factors() \
-        .add_duplication_avoidance_factors()
+        .add_duplication_avoidance_factors() \
+        .finish()
     print(matcher.G.get_factors())
-    frames[0].bboxes[0].calculate_histogram()
-    cv2.imshow('roi', frames[0].bboxes[0].roi)
-    cv2.waitKey(0)
-    plt.plot(frames[0].bboxes[0].calculate_histogram())
-    print(frames[0].bboxes[0].calculate_histogram().shape)
-    plt.show()
+    print(matcher.match().items())
+    #print(matcher.G.get_factors())
+    #frames[0].bboxes[0].calculate_histogram()
+    #print(frames[0].bboxes[0].calculate_histogram().shape)
+    #print(matcher.Gk)

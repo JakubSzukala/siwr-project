@@ -15,10 +15,15 @@ class BBox:
 
 
     def calculate_histogram(self):
-        per_channel_hist = []
-        for channel in cv2.split(self.roi):
-            per_channel_hist.append(cv2.calcHist([channel], [0], None, [256], [0, 256]))
-        return per_channel_hist
+        # https://docs.opencv.org/3.4/d8/dc8/tutorial_histogram_comparison.html
+        hsv_roi = cv2.cvtColor(self.roi, cv2.COLOR_BGR2HSV)
+        ranges = [0, 180, 0, 256,]
+        h_bins = 50
+        s_bins = 60
+        hist_size = [h_bins, s_bins]
+        hist_hsv_roi = cv2.calcHist([hsv_roi], [0, 1], None, hist_size, ranges, accumulate=False)
+        cv2.normalize(hist_hsv_roi, hist_hsv_roi, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX)
+        return hist_hsv_roi
 
 
 class Frame:
@@ -50,7 +55,10 @@ class Matcher:
 
 
     def add_histogram_factors(self):
-        pass
+        for i in range(self.frame2.bbox_n):
+            for j in range(self.frame1.bbox_n):
+                self.G.add_factor([f'X_{i}', f'X_{j}'], self.frame2.bboxes[i].calculate_histogram(), self.frame1.bboxes[j].calculate_histogram())
+        return self
 
 
     def _add_variable_nodes(self):
@@ -84,5 +92,6 @@ if __name__ == '__main__':
     frames[0].bboxes[0].calculate_histogram()
     cv2.imshow('roi', frames[0].bboxes[0].roi)
     cv2.waitKey(0)
-    plt.plot(frames[0].bboxes[0].calculate_histogram()[0])
+    plt.plot(frames[0].bboxes[0].calculate_histogram())
+    print(frames[0].bboxes[0].calculate_histogram().shape)
     plt.show()

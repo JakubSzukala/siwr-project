@@ -1,14 +1,24 @@
 import os
 import sys
-from PIL import Image
+
+from matplotlib import pyplot as plt
+import cv2
 from pgmpy.models import FactorGraph
 
 class BBox:
-    def __init__(self, x1, y1, x2, y2):
-        self.x1 = x1
-        self.y1 = y1
-        self.x2 = x2
-        self.y2 = y2
+    def __init__(self, x, y, w, h, roi):
+        self.x = x
+        self.y = y
+        self.w = w
+        self.h = h
+        self.roi = roi
+
+
+    def calculate_histogram(self):
+        per_channel_hist = []
+        for channel in cv2.split(self.roi):
+            per_channel_hist.append(cv2.calcHist([channel], [0], None, [256], [0, 256]))
+        return per_channel_hist
 
 
 class Frame:
@@ -17,8 +27,11 @@ class Frame:
         self.bbox_n = bbox_n
         self.coordinates = coordinates
         self.bboxes = []
+        img = cv2.imread(source_file)
         for coord in coordinates:
-            self.bboxes.append(BBox(*coord))
+            roi = img[int(coord[1]):int(coord[1]+coord[3]),
+                      int(coord[0]):int(coord[0]+coord[2])]
+            self.bboxes.append(BBox(*coord, roi))
 
 
 class Matcher:
@@ -36,13 +49,17 @@ class Matcher:
         return self
 
 
+    def add_histogram_factors(self):
+        pass
+
+
     def _add_variable_nodes(self):
         for index in range(self.frame1.bbox_n):
             self.G.add_node(f'X_{index}')
 
 
-def parse_labels(path):
-    with open(path, 'r') as f:
+def parse_labels(root_path):
+    with open(os.path.join(root_path, 'bboxes.txt'), 'r') as f:
         lines = f.readlines()
     frames = []
     while len(lines) > 0:
@@ -51,16 +68,21 @@ def parse_labels(path):
         coordinates = []
         for _ in range(bbox_n):
             coordinates.append(lines.pop(0).strip().split())
-        frames.append(Frame(source_file, bbox_n, coordinates))
+            coordinates = [[float(coord) for coord in coordinate] for coordinate in coordinates]
+        frames.append(Frame(os.path.join(root_path, 'frames', source_file), bbox_n, coordinates))
     return frames
 
 
 if __name__ == '__main__':
-    dataset_path = sys.argv[1]
-    print(f"Loading dataset from: {dataset_path}...")
-    parse_labels(dataset_path)
-    frames = parse_labels(dataset_path)
+    dataset_root = sys.argv[1]
+    print(f"Loading dataset from root directory: {dataset_root}...")
+    frames = parse_labels(os.path.join(dataset_root))
     print(frames[1].coordinates)
     matcher = Matcher(frames[0], frames[1])
     matcher.set_frames(frames[1], frames[2])
     print(matcher.G.nodes)
+    frames[0].bboxes[0].calculate_histogram()
+    cv2.imshow('roi', frames[0].bboxes[0].roi)
+    cv2.waitKey(0)
+    plt.plot(frames[0].bboxes[0].calculate_histogram()[0])
+    plt.show()

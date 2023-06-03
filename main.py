@@ -4,6 +4,7 @@ import sys
 from matplotlib import pyplot as plt
 import cv2
 from pgmpy.models import FactorGraph
+from pgmpy.factors.discrete import DiscreteFactor
 
 class BBox:
     def __init__(self, x, y, w, h, roi):
@@ -12,6 +13,7 @@ class BBox:
         self.w = w
         self.h = h
         self.roi = roi
+        self.histogram = self.calculate_histogram()
 
 
     def calculate_histogram(self):
@@ -54,10 +56,21 @@ class Matcher:
         return self
 
 
-    def add_histogram_factors(self):
-        for i in range(self.frame2.bbox_n):
-            for j in range(self.frame1.bbox_n):
-                self.G.add_factor([f'X_{i}', f'X_{j}'], self.frame2.bboxes[i].calculate_histogram(), self.frame1.bboxes[j].calculate_histogram())
+    def add_histogram_comparission_factors(self):
+        for frame2_bbox_idx in range(self.frame2.bbox_n):
+            factor_similarity_values = []
+            for frame1_bbox_idx in range(self.frame1.bbox_n):
+                similarity = cv2.compareHist(
+                    self.frame1.bboxes[frame1_bbox_idx].histogram,
+                    self.frame2.bboxes[frame2_bbox_idx].histogram,
+                    cv2.HISTCMP_CORREL)
+                factor_similarity_values.append(similarity)
+            # 0.25 is the value that will be picked in case that none histogram is similar enough
+            df = DiscreteFactor(
+                [f'X_{frame2_bbox_idx}'],
+                [self.frame1.bbox_n + 1],
+                [[ 0.25 ] + factor_similarity_values ])
+            self.G.add_factors(df)
         return self
 
 
@@ -85,10 +98,10 @@ if __name__ == '__main__':
     dataset_root = sys.argv[1]
     print(f"Loading dataset from root directory: {dataset_root}...")
     frames = parse_labels(os.path.join(dataset_root))
-    print(frames[1].coordinates)
+    #print(frames[1].coordinates)
     matcher = Matcher(frames[0], frames[1])
-    matcher.set_frames(frames[1], frames[2])
-    print(matcher.G.nodes)
+    matcher.set_frames(frames[1], frames[2]).add_histogram_comparission_factors()
+    print(matcher.G.get_factors())
     frames[0].bboxes[0].calculate_histogram()
     cv2.imshow('roi', frames[0].bboxes[0].roi)
     cv2.waitKey(0)

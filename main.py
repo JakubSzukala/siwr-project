@@ -97,8 +97,6 @@ class Matcher:
 
 
     def finish(self):
-        print(f"Factors: {self.G.get_factors()[0].variables}")
-        print(f"Variables: {self.G.get_variable_nodes()}")
         self.belief_propagation = BeliefPropagation(self.G)
         self.belief_propagation.calibrate()
         return self
@@ -132,15 +130,9 @@ if __name__ == '__main__':
     dataset_root = sys.argv[1]
     print(f"Loading dataset from root directory: {dataset_root}...")
     frames = parse_labels(os.path.join(dataset_root))
-    #print(frames[1].coordinates)
     matcher = Matcher(frames[0], frames[1])
     matcher.set_frames(frames[0], frames[1]) \
         .add_histogram_comparission_factors() \
         .add_duplication_avoidance_factors() \
         .finish()
-    print(matcher.G.get_factors())
     print(matcher.match().items())
-    #print(matcher.G.get_factors())
-    #frames[0].bboxes[0].calculate_histogram()
-    #print(frames[0].bboxes[0].calculate_histogram().shape)
-    #print(matcher.Gk)

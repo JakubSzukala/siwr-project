@@ -1,3 +1,4 @@
+from itertools import combinations
 import os
 import sys
 
@@ -5,6 +6,8 @@ from matplotlib import pyplot as plt
 import cv2
 from pgmpy.models import FactorGraph
 from pgmpy.factors.discrete import DiscreteFactor
+
+import numpy as np
 
 class BBox:
     def __init__(self, x, y, w, h, roi):
@@ -74,6 +77,20 @@ class Matcher:
         return self
 
 
+    def add_duplication_avoidance_factors(self):
+        # Prohibit (by adding zeros on diagonal of the matrix) choosing the same bbox twice
+        values = np.ones((self.frame1.bbox_n + 1, self.frame1.bbox_n + 1))
+        np.fill_diagonal(values, 0)
+        values[0, 0] = 1 # For the case where no bbox is chosen
+        for i, j in combinations(range(self.frame2.bbox_n), 2):
+            df = DiscreteFactor(
+                [f'X_{i}', f'X_{j}'],
+                [self.frame1.bbox_n, self.frame1.bbox_n],
+                values)
+            self.G.add_factors(df)
+        return self
+
+
     def _add_variable_nodes(self):
         for index in range(self.frame1.bbox_n):
             self.G.add_node(f'X_{index}')
@@ -100,7 +117,9 @@ if __name__ == '__main__':
     frames = parse_labels(os.path.join(dataset_root))
     #print(frames[1].coordinates)
     matcher = Matcher(frames[0], frames[1])
-    matcher.set_frames(frames[1], frames[2]).add_histogram_comparission_factors()
+    matcher.set_frames(frames[1], frames[2]) \
+        .add_histogram_comparission_factors() \
+        .add_duplication_avoidance_factors()
     print(matcher.G.get_factors())
     frames[0].bboxes[0].calculate_histogram()
     cv2.imshow('roi', frames[0].bboxes[0].roi)

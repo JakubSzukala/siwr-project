@@ -216,4 +216,5 @@ if __name__ == '__main__':
             print(f"matching: {matching}, ground_truth: {ground_truths[i]}")
             print(f"Single sample accuracy: {correct} / {correct + incorrect} = {correct / (correct + incorrect)}")
 
-    print(f"Total accuracy: {correct_cumulative} / {correct_cumulative + incorrect_cumulative} = {correct_cumulative / (correct_cumulative + incorrect_cumulative)}")
+    if with_ground_truth and parser.parse_args().verbose:
+        print(f"Total accuracy: {correct_cumulative} / {correct_cumulative + incorrect_cumulative} = {correct_cumulative / (correct_cumulative + incorrect_cumulative)}")

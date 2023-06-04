@@ -138,7 +138,9 @@ def parse_labels(root_path, with_ground_truth=False):
 
 
 def accuracy_metric(matching, ground_truths):
-    return sum([1 for match, ground_truth in zip(matching, ground_truths) if match == ground_truth]) / len(matching)
+    correct = sum([1 for match, ground_truth in zip(matching, ground_truths) if match == ground_truth])
+    incorrect = len(matching) - correct
+    return correct, incorrect
 
 
 parser = argparse.ArgumentParser(
@@ -153,6 +155,8 @@ if __name__ == '__main__':
     print(f"Loading dataset from root directory: {dataset_root}...")
     frames, ground_truths = parse_labels(os.path.join(dataset_root), with_ground_truth)
 
+    correct_cumulative = 0
+    incorrect_cumulative = 0
     matcher = Matcher()
     for i in range(1, len(frames)):
         matcher.set_frames(frames[i - 1], frames[i]) \
@@ -160,7 +164,10 @@ if __name__ == '__main__':
             .add_duplication_avoidance_factors() \
             .finish()
         matching = matcher.match()
+        correct, incorrect = accuracy_metric(matching.values(), [int(item) for item in ground_truths[i]])
+        correct_cumulative += correct
+        incorrect_cumulative += incorrect
         print(f"matching: {matching}, ground_truth: {ground_truths[i]}")
-        accuracy = accuracy_metric(matching.values(), [int(item) for item in ground_truths[i]])
-        print(f"Accuracy: {accuracy}")
-        input()
+        print(f"Single sample accuracy: {correct} / {correct + incorrect} = {correct / (correct + incorrect)}")
+
+    print(f"Total accuracy: {correct_cumulative} / {correct_cumulative + incorrect_cumulative} = {correct_cumulative / (correct_cumulative + incorrect_cumulative)}")

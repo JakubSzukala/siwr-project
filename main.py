@@ -1,7 +1,6 @@
 import argparse
 from itertools import combinations
 import os
-import sys
 
 from matplotlib import pyplot as plt
 import cv2
@@ -47,9 +46,15 @@ class Frame:
 
 
 class Matcher:
-    def __init__(self):
+    def __init__(self, hyperparameters=None):
         self.G = FactorGraph()
         self.belief_propagation = None
+        if hyperparameters is not None:
+            self.LIKELY_MAX_DISTANCE = hyperparameters['likely_max_distance']
+            self.HIST_SIMILARITY_THRESHOLD = hyperparameters['hist_similarity_threshold']
+        else:
+            self.LIKELY_MAX_DISTANCE = 120
+            self.HIST_SIMILARITY_THRESHOLD = 0.25
 
 
     def set_frames(self, frame1, frame2):
@@ -73,7 +78,7 @@ class Matcher:
             df = DiscreteFactor(
                 [f'X_{frame2_bbox_idx}'],
                 [self.frame1.bbox_n + 1],
-                [[ 0.25 ] + factor_similarity_values ])
+                [[ self.HIST_SIMILARITY_THRESHOLD ] + factor_similarity_values ])
             self.G.add_factors(df)
             self.G.add_edge(f'X_{frame2_bbox_idx}', df)
         return self
@@ -92,6 +97,30 @@ class Matcher:
             self.G.add_factors(df)
             self.G.add_edge(f'X_{i}', df)
             self.G.add_edge(f'X_{j}', df)
+        return self
+
+
+    def add_distance_factors(self):
+        for frame2_bbox_idx in range(self.frame2.bbox_n):
+            inv_distances = []
+            for frame1_bbox_idx in range(self.frame1.bbox_n):
+                box1 = self.frame1.bboxes[frame1_bbox_idx]
+                box2 = self.frame2.bboxes[frame2_bbox_idx]
+                box1_center = np.array([box1.x + box1.w / 2, box1.y + box1.h / 2])
+                box2_center = np.array([box2.x + box2.w / 2, box2.y + box2.h / 2])
+                distance = np.linalg.norm(box1_center - box2_center)
+                if distance == 0:
+                    inv_distance = 1 / 0.0001 # Not sure if this is not too extreme
+                else:
+                    inv_distance = 1 / distance
+                inv_distances.append(inv_distance)
+            # -1 will be picked if no box is closer than LIKELY_MAX_DISTANCE
+            df = DiscreteFactor(
+                [f'X_{frame2_bbox_idx}'],
+                [self.frame1.bbox_n + 1],
+                [[ 1 / self.LIKELY_MAX_DISTANCE ] + inv_distances])
+            self.G.add_factors(df)
+            self.G.add_edge(f'X_{frame2_bbox_idx}', df)
         return self
 
 
@@ -147,6 +176,7 @@ parser = argparse.ArgumentParser(
     description="Inference script for bbox index matching between frames")
 parser.add_argument('dataset_root', type=str, help="Path to dataset root directory")
 parser.add_argument('--with_ground_truth', action='store_true', help="Whether to use ground truth for evaluation")
+parser.add_argument('--verbose', action='store_true', help="Whether to print verbose output")
 
 
 if __name__ == '__main__':
@@ -155,19 +185,29 @@ if __name__ == '__main__':
     print(f"Loading dataset from root directory: {dataset_root}...")
     frames, ground_truths = parse_labels(os.path.join(dataset_root), with_ground_truth)
 
+    print("Inference...")
     correct_cumulative = 0
     incorrect_cumulative = 0
     matcher = Matcher()
+    print(f"Hyperparameters: LIKELY_MAX_DISTANCE: {matcher.LIKELY_MAX_DISTANCE}, HIST_SIMILARITY_THRESHOLD: {matcher.HIST_SIMILARITY_THRESHOLD}")
     for i in range(1, len(frames)):
         matcher.set_frames(frames[i - 1], frames[i]) \
             .add_histogram_comparission_factors() \
             .add_duplication_avoidance_factors() \
+            .add_distance_factors() \
             .finish()
         matching = matcher.match()
-        correct, incorrect = accuracy_metric(matching.values(), [int(item) for item in ground_truths[i]])
-        correct_cumulative += correct
-        incorrect_cumulative += incorrect
-        print(f"matching: {matching}, ground_truth: {ground_truths[i]}")
-        print(f"Single sample accuracy: {correct} / {correct + incorrect} = {correct / (correct + incorrect)}")
+        if with_ground_truth:
+            correct, incorrect = accuracy_metric(matching.values(), [int(item) for item in ground_truths[i]])
+            correct_cumulative += correct
+            incorrect_cumulative += incorrect
+        matching_output_view = list(matching.values())
+        matching_output_view.reverse()
+        matching_output_view = ' '.join([str(item) for item in matching_output_view])
+        print(f"{matching_output_view}")
+
+        if parser.parse_args().verbose:
+            print(f"matching: {matching}, ground_truth: {ground_truths[i]}")
+            print(f"Single sample accuracy: {correct} / {correct + incorrect} = {correct / (correct + incorrect)}")
 
     print(f"Total accuracy: {correct_cumulative} / {correct_cumulative + incorrect_cumulative} = {correct_cumulative / (correct_cumulative + incorrect_cumulative)}")

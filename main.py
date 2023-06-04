@@ -47,15 +47,13 @@ class Frame:
 
 
 class Matcher:
-    def __init__(self, frame1, frame2):
-        self.frame1 = frame1
-        self.frame2 = frame2
+    def __init__(self):
         self.G = FactorGraph()
-        self._add_variable_nodes()
         self.belief_propagation = None
 
 
     def set_frames(self, frame1, frame2):
+        self.G = FactorGraph()
         self.frame1 = frame1
         self.frame2 = frame2
         self._add_variable_nodes()
@@ -139,7 +137,7 @@ def parse_labels(root_path, with_ground_truth=False):
     return frames, per_frame_ground_truths
 
 
-def accuracy(matching, ground_truths):
+def accuracy_metric(matching, ground_truths):
     return sum([1 for match, ground_truth in zip(matching, ground_truths) if match == ground_truth]) / len(matching)
 
 
@@ -154,13 +152,15 @@ if __name__ == '__main__':
     with_ground_truth = parser.parse_args().with_ground_truth
     print(f"Loading dataset from root directory: {dataset_root}...")
     frames, ground_truths = parse_labels(os.path.join(dataset_root), with_ground_truth)
-    matcher = Matcher(frames[0], frames[1])
-    matcher.set_frames(frames[0], frames[1]) \
-        .add_histogram_comparission_factors() \
-        .add_duplication_avoidance_factors() \
-        .finish()
-    matching = matcher.match()
-    print(f"Matching: {matching}")
-    accuracy = accuracy(matching.values(), [int(item) for item in ground_truths[1]])
-    print(f"matching: {matching}, ground_truth: {ground_truths[1]}")
-    print(f"Accuracy: {accuracy}")
+
+    matcher = Matcher()
+    for i in range(1, len(frames)):
+        matcher.set_frames(frames[i - 1], frames[i]) \
+            .add_histogram_comparission_factors() \
+            .add_duplication_avoidance_factors() \
+            .finish()
+        matching = matcher.match()
+        print(f"matching: {matching}, ground_truth: {ground_truths[i]}")
+        accuracy = accuracy_metric(matching.values(), [int(item) for item in ground_truths[i]])
+        print(f"Accuracy: {accuracy}")
+        input()

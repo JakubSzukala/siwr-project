@@ -11,6 +11,8 @@ from pgmpy.inference import BeliefPropagation
 import numpy as np
 
 class BBox:
+    """Class representing a single bounding box."""
+
     def __init__(self, x, y, w, h, roi):
         self.x = x
         self.y = y
@@ -21,6 +23,7 @@ class BBox:
 
 
     def calculate_histogram(self):
+        """Calculates histogram of the bounding box."""
         # https://docs.opencv.org/3.4/d8/dc8/tutorial_histogram_comparison.html
         hsv_roi = cv2.cvtColor(self.roi, cv2.COLOR_BGR2HSV)
         ranges = [0, 180, 0, 256,]
@@ -33,6 +36,8 @@ class BBox:
 
 
 class Frame:
+    """Class representing a single frame."""
+
     def __init__(self, source_file, bbox_n, coordinates):
         self.source_file = source_file
         self.bbox_n = bbox_n
@@ -46,6 +51,8 @@ class Frame:
 
 
 class Matcher:
+    """Class for matching bounding boxes between two frames."""
+
     def __init__(self, hyperparameters=None):
         self.G = FactorGraph()
         self.belief_propagation = None
@@ -58,6 +65,7 @@ class Matcher:
 
 
     def set_frames(self, frame1, frame2):
+        """Sets frames to be matched and resets the factor graph."""
         self.G = FactorGraph()
         self.frame1 = frame1
         self.frame2 = frame2
@@ -66,6 +74,7 @@ class Matcher:
 
 
     def add_histogram_comparission_factors(self):
+        """Adds factors that compare histograms of bboxes."""
         for frame2_bbox_idx in range(self.frame2.bbox_n):
             factor_similarity_values = []
             for frame1_bbox_idx in range(self.frame1.bbox_n):
@@ -85,6 +94,7 @@ class Matcher:
 
 
     def add_duplication_avoidance_factors(self):
+        """Adds factors that prohibit choosing the same bbox twice."""
         # Prohibit (by adding zeros on diagonal of the matrix) choosing the same bbox twice
         values = np.ones((self.frame1.bbox_n + 1, self.frame1.bbox_n + 1))
         np.fill_diagonal(values, 0)
@@ -101,6 +111,7 @@ class Matcher:
 
 
     def add_distance_factors(self):
+        """Adds factors that penalize choosing bboxes that are too far from each other."""
         for frame2_bbox_idx in range(self.frame2.bbox_n):
             inv_distances = []
             for frame1_bbox_idx in range(self.frame1.bbox_n):
@@ -125,23 +136,27 @@ class Matcher:
 
 
     def finish(self):
+        """Finishes graph construction and calibrates belief propagation."""
         self.belief_propagation = BeliefPropagation(self.G)
         self.belief_propagation.calibrate()
         return self
 
 
     def match(self):
+        """Inference"""
         matching = self.belief_propagation.map_query(self.G.get_variable_nodes())
         matching.update((key, value - 1) for key, value in matching.items())
         return dict(sorted(matching.items()))
 
 
     def _add_variable_nodes(self):
+        """Adds variable nodes from second frame to the graph."""
         for index in range(self.frame2.bbox_n):
             self.G.add_node(f'X_{index}')
 
 
 def parse_labels(root_path, with_ground_truth=False):
+    """Utility function parsing label files into Frame objects."""
     target = 'bboxes.txt' if not with_ground_truth else 'bboxes_gt.txt'
     with open(os.path.join(root_path, target), 'r') as f:
         lines = f.readlines()
@@ -167,11 +182,13 @@ def parse_labels(root_path, with_ground_truth=False):
 
 
 def accuracy_metric(matching, ground_truths):
+    """Simple metric calculating number of correct matches and incorrect matches."""
     correct = sum([1 for match, ground_truth in zip(matching, ground_truths) if match == ground_truth])
     incorrect = len(matching) - correct
     return correct, incorrect
 
 
+# Argument
 parser = argparse.ArgumentParser(
     description="Inference script for bbox index matching between frames")
 parser.add_argument('dataset_root', type=str, help="Path to dataset root directory")
@@ -196,6 +213,7 @@ if __name__ == '__main__':
         print("Inference...")
         print(f"Hyperparameters: LIKELY_MAX_DISTANCE: {matcher.LIKELY_MAX_DISTANCE}, HIST_SIMILARITY_THRESHOLD: {matcher.HIST_SIMILARITY_THRESHOLD}")
 
+    # Main inference loop
     for i in range(1, len(frames)):
         matcher.set_frames(frames[i - 1], frames[i]) \
             .add_histogram_comparission_factors() \
@@ -203,10 +221,14 @@ if __name__ == '__main__':
             .add_distance_factors() \
             .finish()
         matching = matcher.match()
+
+        # Accuracy calculation
         if with_ground_truth:
             correct, incorrect = accuracy_metric(matching.values(), [int(item) for item in ground_truths[i]])
             correct_cumulative += correct
             incorrect_cumulative += incorrect
+
+        # Preparing and displaying display view
         matching_output_view = list(matching.values())
         matching_output_view.reverse()
         matching_output_view = ' '.join([str(item) for item in matching_output_view])

@@ -182,14 +182,20 @@ parser.add_argument('--verbose', action='store_true', help="Whether to print ver
 if __name__ == '__main__':
     dataset_root = parser.parse_args().dataset_root
     with_ground_truth = parser.parse_args().with_ground_truth
-    print(f"Loading dataset from root directory: {dataset_root}...")
+
+    if parser.parse_args().verbose:
+        print(f"Loading dataset from root directory: {dataset_root}...")
+
     frames, ground_truths = parse_labels(os.path.join(dataset_root), with_ground_truth)
 
-    print("Inference...")
     correct_cumulative = 0
     incorrect_cumulative = 0
     matcher = Matcher()
-    print(f"Hyperparameters: LIKELY_MAX_DISTANCE: {matcher.LIKELY_MAX_DISTANCE}, HIST_SIMILARITY_THRESHOLD: {matcher.HIST_SIMILARITY_THRESHOLD}")
+
+    if parser.parse_args().verbose:
+        print("Inference...")
+        print(f"Hyperparameters: LIKELY_MAX_DISTANCE: {matcher.LIKELY_MAX_DISTANCE}, HIST_SIMILARITY_THRESHOLD: {matcher.HIST_SIMILARITY_THRESHOLD}")
+
     for i in range(1, len(frames)):
         matcher.set_frames(frames[i - 1], frames[i]) \
             .add_histogram_comparission_factors() \

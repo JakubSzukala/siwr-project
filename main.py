@@ -214,7 +214,17 @@ if __name__ == '__main__':
         print(f"Hyperparameters: LIKELY_MAX_DISTANCE: {matcher.LIKELY_MAX_DISTANCE}, HIST_SIMILARITY_THRESHOLD: {matcher.HIST_SIMILARITY_THRESHOLD}")
 
     # Main inference loop
-    for i in range(1, len(frames)):
+    for i in range(len(frames)):
+        if i == 0:
+            print(('-1 ' * frames[i].bbox_n).strip())
+            continue
+        if frames[i].bbox_n == 0:
+            print()
+            continue
+        if frames[i - 1].bbox_n == 0:
+            print(('-1 ' * frames[i].bbox_n).strip())
+            continue
+
         matcher.set_frames(frames[i - 1], frames[i]) \
             .add_histogram_comparission_factors() \
             .add_duplication_avoidance_factors() \

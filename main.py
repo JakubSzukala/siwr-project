@@ -230,7 +230,6 @@ if __name__ == '__main__':
 
         # Preparing and displaying display view
         matching_output_view = list(matching.values())
-        matching_output_view.reverse()
         matching_output_view = ' '.join([str(item) for item in matching_output_view])
         print(f"{matching_output_view}")
 
